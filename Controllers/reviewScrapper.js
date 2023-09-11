@@ -2,6 +2,7 @@ const express = require("express");
 const signuprouter = express.Router();
 const cors = require("cors");
 const puppeteer = require("puppeteer"); 
+const { sub, format } = require('date-fns');
 signuprouter.options("/scrapping", cors());
 signuprouter.post("/scrapping", async(req, res) => {
    (async () => {
@@ -10,7 +11,6 @@ signuprouter.post("/scrapping", async(req, res) => {
     const browser = await puppeteer.launch({headless: true});
     const page = await browser.newPage();
 
-    // Go to your site
     await page.goto(URL);
     await page.setViewport({width: 1580, height: 1424});
     await page.waitForNavigation();
@@ -39,10 +39,17 @@ signuprouter.post("/scrapping", async(req, res) => {
       const results = new Set();
       while (true) {
         const items = document.querySelectorAll(".jftiEf");
+        const dataIds = Array.from(items, element => element.getAttribute('data-review-id'));
+        const ratings = document.querySelectorAll(".kvMYJc");
+        const ratings_count = Array.from(ratings, element => element.getAttribute('aria-label'));
+
+        const itemTexts = Array.from(items, element => element.innerText);    
         
-        items.forEach(item => {
-          itemText=item.innerText
-            results.add(itemText);
+        items.forEach((item,index) => {
+          dataId = dataIds[index]
+          itemText=itemTexts[index]
+          rating=ratings_count[index]
+            results.add({itemText,dataId,rating});
         });
   
         if (Date.now() - startTime >= maxWaitTime) {
@@ -59,17 +66,40 @@ signuprouter.post("/scrapping", async(req, res) => {
     const newData = [];
 
     data.forEach(item => {
-      const parts = item.split(',');
-      newData.push(parts);
+      const parts = item.itemText.split(',');
+      const data_id=item.dataId
+      const ratings=item.rating
+      newData.push({parts,data_id,ratings});
     });
     
     const newReviews=[]
     
     for(let i=0;i<newData.length;i++)
     {
-      if (newData[i][0].includes('NEW')) {
-        const parts=newData[i][0].split(',')
-        newReviews.push(parts)
+      if (newData[i].parts[0].includes('NEW')) {
+        const parts=newData[i].parts[0].split(',')
+        let chunks=parts[0].split('\n')
+        let extractedText;
+        if (chunks.some(part => part.includes('review') || part.includes('reviews'))) {
+          extractedText = chunks[2];
+        } else {
+          extractedText = chunks[1];
+        }
+        const currentDate = new Date();
+        const calculatedDate = sub(currentDate, { days: parseInt(extractedText) });
+        if(calculatedDate<req.body.date)
+        {
+          continue
+        }
+        else{
+          const inputDate = new Date(calculatedDate);
+
+          const adjustedDate = new Date(inputDate.getTime() - inputDate.getTimezoneOffset() * 60000);
+
+          const formattedDate = adjustedDate.toISOString().replace('T', ' ').replace('Z', '');
+
+          newReviews.push({id:newData[i].data_id,author:chunks[0],rating:parseInt(newData[i].ratings.split(' ')[0]),datetime:formattedDate,content:chunks[4]!=''?chunks[4]:'' })
+        }
       } 
     }
     
