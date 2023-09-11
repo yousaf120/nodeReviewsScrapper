@@ -7,7 +7,7 @@ signuprouter.options("/scrapping", cors());
 signuprouter.post("/scrapping", async(req, res) => {
    (async () => {
     const req_data=req.body
-    const URL = "https://www.google.com/maps/search/"+req_data.url;
+    const URL = "https://www.google.com/maps/search/"+req_data.q;
     const browser = await puppeteer.launch({headless: true});
     const page = await browser.newPage();
 
